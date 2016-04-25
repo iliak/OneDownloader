@@ -25,7 +25,8 @@ Configure config.json file :
     "directory": "autodownload",		   // Directory to watch on 1fichier.com
     "done": "done",				            		// Directory name in the watch directory where to move downloaded files
     "delay": 300					               	// Time to sleep before next looking for new file to download
-}```
+}
+```
 
 Run the script :
 `python3 onefichier.py`
