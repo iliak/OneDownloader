@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-
-# import time
+import time
 from time import sleep
 import json
 import os.path
@@ -9,7 +8,6 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-from pprint import pprint
 
 class OneFichier():
     base_url = "https://1fichier.com"
@@ -131,10 +129,10 @@ class OneFichier():
 
     def downloadFile(self, data, path=None):
         """
+        Download a file
 
-        :param data:
-        :param path:
-        :return:
+        :param data: File information data
+        :param path: Local download path
         """
 
         # Oops, some infos are missing !!
@@ -164,11 +162,7 @@ class OneFichier():
         with open(filename, 'wb') as handle:
             # print("File opened")
             for block in response.iter_content(chunksize):
-                # done += chunksize
-                # self.printProgress(done, headers["content-length"], "Progress:", "Complete", 100)
-                # percent = int(round(done / float(headers["content-length"]) * 100))
-                # print(str(done) + " / " + headers["content-length"] + " : "+ str(percent) + "%", flush=True)
-                # sys.stdout.flush()
+                done += chunksize
                 handle.write(block)
 
         end = (time.time() - start) * 1000
