@@ -17,14 +17,16 @@ Beautiful Soup => sudo pip install beautifulsoup4
 ## Usage
 
 Configure config.json file :
+```javascript
 {
-    "**email**": "email@example.com",
-    "**password**": "MySuperPassword",
-    "**download_path**": "./",
-    "**directory**": "autodownload",
-    "**done**": "done",
-    "**delay**": 300
-}
+    "email": "email@example.com",		  // email login
+    "password": "MySuperPassword",		 // Ultra secret password
+    "download_path": "./",			       	// Where to store downloaded file on your computer
+    "directory": "autodownload",		   // Directory to watch on 1fichier.com
+    "done": "done",				            		// Directory name in the watch directory where to move downloaded files
+    "delay": 300					               	// Time to sleep before next looking for new file to download
+}```
+
 Run the script :
 `python3 onefichier.py`
 
