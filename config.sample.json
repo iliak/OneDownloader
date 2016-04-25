@@ -1,0 +1,8 @@
+{
+  "email": "email@example.com",
+  "password": "MySuperPassword",
+  "download_path": "./",
+  "directory": "autodownload",
+  "done": "done",
+  "delay": 300
+}
