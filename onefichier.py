@@ -78,6 +78,11 @@ class OneFichier():
 
 
     def logout(self):
+
+        # Enable the download menu
+        self.session.get(self.base_url + "/console/params.pl?menu=true")
+
+
         self.session.get(self.base_url + "/logout.pl")
         print("Logout...")
         pass
@@ -385,7 +390,9 @@ while True:
         one.downloadFile(file)
 
         # Backup the file
-        # one.moveFile(file_id, done_id)
+        one.moveFile(file_id, done_id)
+
+    one.logout()
 
     # Some delay
     print("Going to sleep...")
