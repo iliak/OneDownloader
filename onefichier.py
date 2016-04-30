@@ -2,12 +2,15 @@
 
 import time
 from time import sleep
+import logging
 import json
 import os.path
 import re
 import requests
+from requests.auth import HTTPDigestAuth
 from bs4 import BeautifulSoup
-
+import datetime
+import http.client as http_client
 
 class OneFichier():
     base_url = "https://1fichier.com"
@@ -18,6 +21,15 @@ class OneFichier():
 
         :param config_file: Json config file name
         """
+
+        # Debug requests traffic
+        # http_client.HTTPConnection.debuglevel = 1
+        # logging.basicConfig()
+        # logging.getLogger().setLevel(logging.DEBUG)
+        # requests_log = logging.getLogger("requests.packages.urllib3")
+        # requests_log.setLevel(logging.DEBUG)
+        # requests_log.propagate = True
+
 
         # Open config file and check mandatory values
         self.config = json.load(open(config_file))
@@ -55,15 +67,14 @@ class OneFichier():
             "restrict": restrict,
             "purge": purge,
         }
+
         result = self.session.post(self.base_url + "/login.pl", data)
-        # print(result.content.decode("utf-8"))
 
-        print("Getting Directories list")
+        # Disable the download menu
+        self.session.get(self.base_url + "/console/params.pl?menu=false")
+
+        # Update directories
         self.getDirectories()
-
-
-        print("Done !")
-        pass
 
 
     def logout(self):
@@ -139,31 +150,57 @@ class OneFichier():
         if data is None or data["name"] is None or data["url"] is None:
             return
 
-        # File already downloaded
-        path = path if None else self.config["download_path"]
-        filename = os.path.abspath(os.path.join(path, data["name"]))
-        # print(filename)
-        if os.path.isfile(filename):
-            print("File \"" + data["name"] + "\" already downloaded. Skipping !")
-            return
+        print (data["name"])
 
         # Open the url
-        print("Processing file \"" + data["name"] + "\"...")
-        response = self.session.post(data["url"])
+        get = self.session.get(data["url"] + "&e=1&auth=1")
+        url = get.text.split(";")[0]
+
+        response = self.session.get(url, stream = True)
         if not response.ok:
-            print("Failed to get http data !")
+            print("Failed to get stream data !")
             return
 
         # Download the stream
         headers = response.headers
+        file_size = int(headers["content-length"] if 'content-length' in headers else 1)
+        print("File size : " + str(file_size) + " bytes (" + str(round(file_size / 1024 / 1024, 2)) + "M)")
+
+        # File already downloaded
+        path = path if None else self.config["download_path"]
+        filename = os.path.abspath(os.path.join(path, data["name"]))
+        if os.path.isfile(filename):
+
+            # Same size ?
+            if os.path.getsize(filename) == file_size:
+                print("File already downloaded. Skipping !")
+                return
+
+            # Delete partially downloaded file
+            os.remove(filename)
+
         done = 0
         chunksize = 4096 * 16
+        blocks = 0
         start = time.time()
         with open(filename, 'wb') as handle:
-            # print("File opened")
+            print(str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
             for block in response.iter_content(chunksize):
-                done += chunksize
+
                 handle.write(block)
+
+                # Space separator
+                if blocks % 8 == 0:
+                    print(" ", end='', flush=True)
+
+                # New line
+                if blocks % 48 == 0:
+                    print("xx% xx:xx:xx\n" + str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
+
+                blocks += 1
+                print('.', end='', flush=True)
+
+                done += chunksize
 
         end = (time.time() - start) * 1000
         print("Elapsed time : " + str(round(end)) + " seconds")
@@ -211,6 +248,20 @@ class OneFichier():
 
         pass
 
+
+    def addFileToDirectory(self, file_name, dir_id):
+        """
+        Add a file to a directory
+
+        :param file_name:
+        :param dir_id:
+        :return:
+        """
+        # POST : https://1fichier.com/?<file_id>
+        # data with POST : did = <directory_id>
+
+
+        pass
 
 
     def getDirectoryId(self, name):
@@ -334,7 +385,7 @@ while True:
         one.downloadFile(file)
 
         # Backup the file
-        one.moveFile(file_id, done_id)
+        # one.moveFile(file_id, done_id)
 
     # Some delay
     print("Going to sleep...")
