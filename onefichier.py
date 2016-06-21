@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 
 import time
-from time import sleep
-import logging
 import json
 import os.path
 import re
 import requests
-from requests.auth import HTTPDigestAuth
 from bs4 import BeautifulSoup
-import datetime
-import http.client as http_client
+
 
 class OneFichier():
     base_url = "https://1fichier.com"
-
 
     def __init__(self, config_file = "./config.json"):
         """
@@ -45,7 +40,6 @@ class OneFichier():
         self.session = requests.Session()
         self.Directories = {}
 
-
     def login(self, lt = "on", restrict = "off", purge = "off"):
         """
 
@@ -70,24 +64,15 @@ class OneFichier():
 
         result = self.session.post(self.base_url + "/login.pl", data)
 
-        # Disable the download menu
-        self.session.get(self.base_url + "/console/params.pl?menu=false")
 
         # Update directories
         self.getDirectories()
 
-
     def logout(self):
-
-        # Enable the download menu
-        self.session.get(self.base_url + "/console/params.pl?menu=true")
-
 
         self.session.get(self.base_url + "/logout.pl")
         print("Logout...")
         pass
-
-
 
     def getFilesByDirectoryName(self, name =""):
         """
@@ -98,7 +83,6 @@ class OneFichier():
         dir_id = self.getDirectoryId(name)
 
         return self.getFilesByDirectoryId(dir_id)
-
 
     def getFilesByDirectoryId(self, dir_id):
         """
@@ -131,7 +115,6 @@ class OneFichier():
 
         return files
 
-
     def getFilesToDownload(self):
         """
         Returns the list of file to downloadFile
@@ -141,7 +124,6 @@ class OneFichier():
         return self.getFilesByDirectoryName(self.config["directory"])
 
         pass
-
 
     def downloadFile(self, data, path=None):
         """
@@ -157,9 +139,15 @@ class OneFichier():
 
         print (data["name"])
 
+        # Disable the download menu
+        self.session.get(self.base_url + "/console/params.pl?menu=false")
+
         # Open the url
         get = self.session.get(data["url"] + "&e=1&auth=1")
         url = get.text.split(";")[0]
+
+        # Enable the download menu
+        self.session.get(self.base_url + "/console/params.pl?menu=true")
 
         response = self.session.get(url, stream = True)
         if not response.ok:
@@ -195,12 +183,15 @@ class OneFichier():
                 handle.write(block)
 
                 # Space separator
-                if blocks % 8 == 0:
+                if blocks % 8 == 0 and blocks > 0:
                     print(" ", end='', flush=True)
 
                 # New line
-                if blocks % 48 == 0:
-                    print("xx% xx:xx:xx\n" + str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
+                if blocks % 48 == 0 and blocks > 0:
+                    remain = 0
+
+                    print("{:.2%}".format(done / file_size))
+                    print(str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
 
                 blocks += 1
                 print('.', end='', flush=True)
@@ -209,9 +200,6 @@ class OneFichier():
 
         end = (time.time() - start) * 1000
         print("Elapsed time : " + str(round(end)) + " seconds")
-
-        pass
-
 
     def deleteFile(self, file_id):
         """
@@ -230,7 +218,6 @@ class OneFichier():
         result = self.session.post(self.base_url + "/console/remove.pl", data)
 
         pass
-
 
     def moveFile(self, file_id, dir_id):
         """
@@ -253,7 +240,6 @@ class OneFichier():
 
         pass
 
-
     def addFileToDirectory(self, file_name, dir_id):
         """
         Add a file to a directory
@@ -268,7 +254,6 @@ class OneFichier():
 
         pass
 
-
     def getDirectoryId(self, name):
         """
         Returns the id of a directory given by its name
@@ -281,7 +266,6 @@ class OneFichier():
                 return ref
 
         return None
-
 
     def getDirectories(self, dir_id = 0):
         """
@@ -321,7 +305,6 @@ class OneFichier():
 
         return self.Directories
 
-
     def getDirectory(self, dir_id, name):
         """
         Checks if a directory is present
@@ -337,7 +320,6 @@ class OneFichier():
                 return ref
 
         return None
-
 
     def makeDirectory(self, dir_id, name):
         """
@@ -364,8 +346,6 @@ class OneFichier():
 
         return None
 
-
-
 one = OneFichier()
 
 while True:
@@ -391,9 +371,6 @@ while True:
 
         # Backup the file
         one.moveFile(file_id, done_id)
-
-    one.logout()
-
     # Some delay
     print("Going to sleep...")
-    sleep(int(one.config["delay"]))
+    time.sleep(int(one.config["delay"]))
