@@ -201,6 +201,9 @@ class OneFichier():
                 print("File already downloaded. Skipping !")
                 return
 
+            # TODO: Resume download => http://stackoverflow.com/questions/22894211/how-to-resume-file-download-in-python
+            print("Trying to resume download... failed !")
+
             # Delete partially downloaded file
             os.remove(filename)
 
@@ -208,6 +211,7 @@ class OneFichier():
         chunksize = 4096 * 16
         blocks = 0
         start = time.time()
+        # TODO: If resume download, change 'wb' to 'ab'
         with open(filename, 'wb') as handle:
             print(str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
             for block in response.iter_content(chunksize):
