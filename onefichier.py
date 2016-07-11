@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
 
 import time
 import json
@@ -6,25 +8,29 @@ import os.path
 import re
 import requests
 from bs4 import BeautifulSoup
+import getopt
+import sys
 
 
 class OneFichier():
-    base_url = "https://1fichier.com"
+    BASE_URL = "https://1fichier.com"
+    CONFIG_PATH = ".config/onefichier/"
+    CONFIG_FILE = "config.json"
 
-    def __init__(self, config_file = "./config.json"):
+    def __init__(self, config_file=None):
         """
 
         :param config_file: Json config file name
         """
 
-        # Debug requests traffic
-        # http_client.HTTPConnection.debuglevel = 1
-        # logging.basicConfig()
-        # logging.getLogger().setLevel(logging.DEBUG)
-        # requests_log = logging.getLogger("requests.packages.urllib3")
-        # requests_log.setLevel(logging.DEBUG)
-        # requests_log.propagate = True
+        if config_file is None:
+            config_file = os.path.join(os.path.expanduser("~"), self.CONFIG_FILE)
 
+        # Config file exists ?
+        if not os.path.isfile(config_file):
+            print("Config file not found in ~/.config/onefichier/config.json !")
+            print("Please run with --init parameter")
+            init()
 
         # Open config file and check mandatory values
         self.config = json.load(open(config_file))
@@ -39,6 +45,32 @@ class OneFichier():
 
         self.session = requests.Session()
         self.Directories = {}
+
+    @staticmethod
+    def makeconf():
+        print("make init procedure...")
+
+        # Create the path in home directory
+        path = os.path.join(os.path.expanduser("~"), OneFichier.CONFIG_PATH)
+        if not os.path.exists(path):
+            os.makedirs(path)
+            os.chmod(path, 0o700)
+
+        data = dict()
+        data["email"] = input("What is your login: ")
+        data["password"] = input("Whate is your password: ")
+        data["download_path"] = input("What is the local absolute where to download files: ")
+        data["directory"] = input("What is the name of the folder on 1fichier to watch: ")
+        data["done"] = input("What is the name of the folder where to move downloaded files: ")
+        data["delay"] = input("Seconds to sleep before looking for new file to download: ")
+
+        file = os.path.join(path, OneFichier.CONFIG_FILE)
+        with open(file, "w") as outfile:
+            json.dump(data, outfile)
+
+        os.chmod(file, 0o700)
+
+        sys.exit()
 
     def login(self, lt = "on", restrict = "off", purge = "off"):
         """
@@ -62,7 +94,7 @@ class OneFichier():
             "purge": purge,
         }
 
-        result = self.session.post(self.base_url + "/login.pl", data)
+        result = self.session.post(self.BASE_URL + "/login.pl", data)
 
 
         # Update directories
@@ -70,7 +102,7 @@ class OneFichier():
 
     def logout(self):
 
-        self.session.get(self.base_url + "/logout.pl")
+        self.session.get(self.BASE_URL + "/logout.pl")
         print("Logout...")
         pass
 
@@ -92,7 +124,7 @@ class OneFichier():
         :return: Array of files
         """
 
-        res = self.session.get(self.base_url + "/console/files.pl?dir_id=" + str(dir_id) + "&oby=da")
+        res = self.session.get(self.BASE_URL + "/console/files.pl?dir_id=" + str(dir_id) + "&oby=da")
 
         # Htmlify the result
         soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html>", "html.parser")
@@ -103,7 +135,7 @@ class OneFichier():
             ref = li["rel"]
             name = li.find("a").contents[0]
 
-            res = self.session.get(self.base_url + "/console/link.pl?selected[]=" + ref)
+            res = self.session.get(self.BASE_URL + "/console/link.pl?selected[]=" + ref)
             soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html", "html.parser")
             a = soup.find("a", href=re.compile("^https://1fichier.com/"))
 
@@ -140,14 +172,14 @@ class OneFichier():
         print (data["name"])
 
         # Disable the download menu
-        self.session.get(self.base_url + "/console/params.pl?menu=false")
+        self.session.get(self.BASE_URL + "/console/params.pl?menu=false")
 
         # Open the url
         get = self.session.get(data["url"] + "&e=1&auth=1")
         url = get.text.split(";")[0]
 
         # Enable the download menu
-        self.session.get(self.base_url + "/console/params.pl?menu=true")
+        self.session.get(self.BASE_URL + "/console/params.pl?menu=true")
 
         response = self.session.get(url, stream = True)
         if not response.ok:
@@ -187,7 +219,7 @@ class OneFichier():
                     print(" ", end='', flush=True)
 
                 # New line
-                if blocks % 48 == 0 and blocks > 0:
+                if blocks % 80 == 0 and blocks > 0:
                     remain = 0
 
                     print("{:.2%}".format(done / file_size))
@@ -215,7 +247,7 @@ class OneFichier():
             "selected[]": file_id,
             "remove": 1,
         }
-        result = self.session.post(self.base_url + "/console/remove.pl", data)
+        result = self.session.post(self.BASE_URL + "/console/remove.pl", data)
 
         pass
 
@@ -236,7 +268,7 @@ class OneFichier():
             "dragged_type": 2,
             "dropped_dir": dir_id,
         }
-        result = self.session.post(self.base_url + "/console/op.pl", data)
+        result = self.session.post(self.BASE_URL + "/console/op.pl", data)
 
         pass
 
@@ -275,7 +307,7 @@ class OneFichier():
 
         """
 
-        res = self.session.get(self.base_url + "/console/dirs.pl?dir_id=" + str(dir_id))
+        res = self.session.get(self.BASE_URL + "/console/dirs.pl?dir_id=" + str(dir_id))
         # print(res.content.decode("utf-8"))
 
         # Htmlify the result
@@ -334,7 +366,7 @@ class OneFichier():
             "dir_id": dir_id,
             "mkdir": name
         }
-        result = self.session.post(self.base_url + "/console/mkdir.pl", data)
+        result = self.session.post(self.BASE_URL + "/console/mkdir.pl", data)
 
         # Update directory list
         f = self.getDirectories(dir_id)
@@ -346,31 +378,51 @@ class OneFichier():
 
         return None
 
-one = OneFichier()
 
-while True:
-    # Login
-    one.login()
+def main(argv):
 
-    # Files to downloadFile
-    files = one.getFilesToDownload()
+    # Read arguments
+    try:
+        opts, args = getopt.getopt(argv, "i", ["init"])
+    except getopt.GetoptError:
+        print("onefichier --help")
+        sys.exit(2)
 
-    # Download directory id
-    dir_id = one.getDirectoryId(one.config["directory"])
+    for opt, args in opts:
+        if opt in ('-i', '--init'):
+            OneFichier.makeconf()
 
-    # Backup directory present ?
-    done_id = one.getDirectory(dir_id, one.config["done"])
-    if not done_id:
-        done_id = one.makeDirectory(dir_id, one.config["done"])
+    sys.exit()
 
-    # Let's go !!!
-    for file_id, file in files.items():
+    one = OneFichier()
 
-        # Download file
-        one.downloadFile(file)
+    while True:
+        # Login
+        one.login()
 
-        # Backup the file
-        one.moveFile(file_id, done_id)
-    # Some delay
-    print("Going to sleep...")
-    time.sleep(int(one.config["delay"]))
+        # Files to downloadFile
+        files = one.getFilesToDownload()
+
+        # Download directory id
+        dir_id = one.getDirectoryId(one.config["directory"])
+
+        # Backup directory present ?
+        done_id = one.getDirectory(dir_id, one.config["done"])
+        if not done_id:
+            done_id = one.makeDirectory(dir_id, one.config["done"])
+
+        # Let's go !!!
+        for file_id, file in files.items():
+
+            # Download file
+            one.downloadFile(file)
+
+            # Backup the file
+            one.moveFile(file_id, done_id)
+
+        # Some delay
+        print("Going to sleep...")
+        time.sleep(int(one.config["delay"]))
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
