@@ -49,7 +49,7 @@ class OneFichier():
 
     @staticmethod
     def makeconf():
-        print("make init procedure...")
+        print("make config file...")
 
         # Create the path in home directory
         path = os.path.join(os.path.expanduser("~"), OneFichier.CONFIG_PATH)
@@ -175,7 +175,7 @@ class OneFichier():
         if data is None or data["name"] is None or data["url"] is None:
             return
 
-        print (data["name"])
+        print(data["name"])
 
         # Disable the download menu
         self.session.get(self.BASE_URL + "/console/params.pl?menu=false")
@@ -184,41 +184,56 @@ class OneFichier():
         get = self.session.get(data["url"] + "&e=1&auth=1")
         url = get.text.split(";")[0]
 
-        # Enable the download menu
+        # Enable back the download menu
         self.session.get(self.BASE_URL + "/console/params.pl?menu=true")
 
-        response = self.session.get(url, stream = True)
+        # File already downloaded
+        headers = {}
+        path = path if None else self.config["download_path"]
+        filename = os.path.abspath(os.path.join(path, data["name"]))
+        if os.path.isfile(filename):
+            print("Resuming download...")
+            headers = {'Range': 'bytes=%d-' % os.path.getsize(filename)}
+
+        # Requesting the file
+        response = self.session.get(url, headers=headers, stream=True)
         if not response.ok:
-            print("Failed to get stream data !")
+
+            # File fully downloaded
+            if response.status_code == 416:
+                print("File already downloaded, skipping...")
+
+            # Global error...
+            else:
+                print("Global error (HTTP status code: " + str(response.status_code) + ") !")
+
             return
 
         # Download the stream
         headers = response.headers
-        file_size = int(headers["content-length"] if 'content-length' in headers else 1)
+
+        # Resume mode ?
+        if 'Content-Range' not in headers:
+            openmode = "wb"             # open file mode
+            openpos = 0                 # seek position in resume mode
+        else:
+            openmode = "ab"
+            m = re.match("bytes (\d+)-(\d+)\/(\d+)", headers["Content-Range"])
+            openpos = int(m.group(1))
+
+        file_size = int(headers["content-length"]) if 'content-length' in headers else 1
         print("File size : " + str(file_size) + " bytes (" + str(round(file_size / 1024 / 1024, 2)) + "M)")
 
-        # File already downloaded
-        path = path if None else self.config["download_path"]
-        filename = os.path.abspath(os.path.join(path, data["name"]))
-        if os.path.isfile(filename):
+        done = openpos          # bytes already downloaded
+        chunksize = 4096 * 16   # size of the stream
+        blocks = 0              # number of blocks already downloaded
+        start = time.time()     # Total elapsed time
+        with open(filename, openmode) as handle:
 
-            # Same size ?
-            if os.path.getsize(filename) == file_size:
-                print("File already downloaded. Skipping !")
-                return
+            # resume mode ?
+            if openpos > 0:
+                handle.seek(openpos)
 
-            # TODO: Resume download => http://stackoverflow.com/questions/22894211/how-to-resume-file-download-in-python
-            print("Trying to resume download... failed !")
-
-            # Delete partially downloaded file
-            os.remove(filename)
-
-        done = 0
-        chunksize = 4096 * 16
-        blocks = 0
-        start = time.time()
-        # TODO: If resume download, change 'wb' to 'ab'
-        with open(filename, 'wb') as handle:
             print(str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
             for block in response.iter_content(chunksize):
 
@@ -230,8 +245,6 @@ class OneFichier():
 
                 # New line
                 if blocks % 80 == 0 and blocks > 0:
-                    remain = 0
-
                     print("{:.2%}".format(done / file_size))
                     print(str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
 
@@ -402,8 +415,6 @@ def main(argv):
         if opt in ('-i', '--init'):
             OneFichier.makeconf()
 
-    # sys.exit()
-
     one = OneFichier()
 
     while True:
@@ -419,6 +430,7 @@ def main(argv):
         # Backup directory present ?
         done_id = one.getDirectory(dir_id, one.config["done"])
         if not done_id:
+            # Then make it
             done_id = one.makeDirectory(dir_id, one.config["done"])
 
         # Let's go !!!
