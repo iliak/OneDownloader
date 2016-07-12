@@ -2,15 +2,17 @@
 # -*- coding: utf-8 -*-
 
 
-import time
+import datetime
+import getopt
+import getpass
 import json
 import os.path
 import re
+import sys
+import time
+
 import requests
 from bs4 import BeautifulSoup
-import getopt
-import sys
-import getpass
 
 
 class OneFichier():
@@ -175,6 +177,8 @@ class OneFichier():
         if data is None or data["name"] is None or data["url"] is None:
             return
 
+        ts = time.time()
+        print(datetime.datetime.fromtimestamp(ts).strftime('%d-%m-%Y %H:%M:%S'))
         print(data["name"])
 
         # Disable the download menu
@@ -254,6 +258,9 @@ class OneFichier():
                 done += chunksize
 
         end = (time.time() - start) * 1000
+
+        ts = time.time()
+        print(datetime.datetime.fromtimestamp(ts).strftime('%d-%m-%Y %H:%M:%S'))
         print("Elapsed time : " + str(round(end)) + " seconds")
 
     def deleteFile(self, file_id):
