@@ -10,6 +10,7 @@ import requests
 from bs4 import BeautifulSoup
 import getopt
 import sys
+import getpass
 
 
 class OneFichier():
@@ -23,14 +24,14 @@ class OneFichier():
         :param config_file: Json config file name
         """
 
+        path = os.path.join(os.path.expanduser("~"), OneFichier.CONFIG_PATH)
         if config_file is None:
-            config_file = os.path.join(os.path.expanduser("~"), self.CONFIG_FILE)
+            config_file = os.path.join(os.path.join(path, self.CONFIG_FILE))
 
         # Config file exists ?
         if not os.path.isfile(config_file):
-            print("Config file not found in ~/.config/onefichier/config.json !")
-            print("Please run with --init parameter")
-            init()
+            print("Config file not found in " + config_file)
+            sys.exit("Please run with --init parameter")
 
         # Open config file and check mandatory values
         self.config = json.load(open(config_file))
@@ -58,21 +59,26 @@ class OneFichier():
 
         data = dict()
         data["email"] = input("What is your login: ")
-        data["password"] = input("Whate is your password: ")
+        data["password"] = getpass.getpass("Whate is your password: ")
         data["download_path"] = input("What is the local absolute where to download files: ")
         data["directory"] = input("What is the name of the folder on 1fichier to watch: ")
         data["done"] = input("What is the name of the folder where to move downloaded files: ")
-        data["delay"] = input("Seconds to sleep before looking for new file to download: ")
+        data["delay"] = input("Seconds to sleep before looking for new file to download [300]: ")
 
+        if data["delay"] == "":
+            data["delay"] = 300
+
+        # Save the file
         file = os.path.join(path, OneFichier.CONFIG_FILE)
         with open(file, "w") as outfile:
-            json.dump(data, outfile)
+            json.dump(data, outfile, sort_keys=True, indent=3, separators=(',', ': '))
 
-        os.chmod(file, 0o700)
+        # Protect the file
+        os.chmod(file, 0o600)
 
         sys.exit()
 
-    def login(self, lt = "on", restrict = "off", purge = "off"):
+    def login(self, lt="on", restrict="off", purge="off"):
         """
 
         :param mail: login
@@ -396,7 +402,7 @@ def main(argv):
         if opt in ('-i', '--init'):
             OneFichier.makeconf()
 
-    sys.exit()
+    # sys.exit()
 
     one = OneFichier()
 

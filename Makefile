@@ -10,8 +10,6 @@ CP      = cp
 
 # Files
 FILES   = onefichier.py
-CONFIG  = config.sample.json
-DOCS    = README.md
 
 # Target paths
 NAME	= onefichier
