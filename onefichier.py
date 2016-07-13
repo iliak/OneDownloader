@@ -6,16 +6,18 @@ import datetime
 import getopt
 import getpass
 import json
+import logging
 import os.path
 import re
 import sys
 import time
+import locale
 
 import requests
 from bs4 import BeautifulSoup
 
 
-class OneFichier():
+class OneFichier:
     BASE_URL = "https://1fichier.com"
     CONFIG_PATH = ".config/onefichier/"
     CONFIG_FILE = "config.json"
@@ -26,14 +28,15 @@ class OneFichier():
         :param config_file: Json config file name
         """
 
+        # Config file exists ?
         path = os.path.join(os.path.expanduser("~"), OneFichier.CONFIG_PATH)
         if config_file is None:
             config_file = os.path.join(os.path.join(path, self.CONFIG_FILE))
 
-        # Config file exists ?
         if not os.path.isfile(config_file):
-            print("Config file not found in " + config_file)
-            sys.exit("Please run with --init parameter")
+            logging.critical("Config file not found in " + config_file)
+            logging.critical("Please run with --init parameter")
+            sys.exit(2)
 
         # Open config file and check mandatory values
         self.config = json.load(open(config_file))
@@ -46,6 +49,7 @@ class OneFichier():
         if "download_path" not in self.config:
             self.config["download_path"] = "./"
 
+        logging.getLogger("requests").setLevel(logging.WARNING)
         self.session = requests.Session()
         self.Directories = {}
 
@@ -91,7 +95,7 @@ class OneFichier():
         :return:
         """
 
-        print("Login to 1fichier.com...")
+        logging.info("Login to 1fichier.com...")
 
         # Login test
         data ={
@@ -111,7 +115,7 @@ class OneFichier():
     def logout(self):
 
         self.session.get(self.BASE_URL + "/logout.pl")
-        print("Logout...")
+        logging.debug("Logout...")
         pass
 
     def getFilesByDirectoryName(self, name =""):
@@ -178,8 +182,7 @@ class OneFichier():
             return
 
         ts = time.time()
-        print(datetime.datetime.fromtimestamp(ts).strftime('%d-%m-%Y %H:%M:%S'))
-        print(data["name"])
+        logging.info("Downloading file \"" + data["name"] + "\"")
 
         # Disable the download menu
         self.session.get(self.BASE_URL + "/console/params.pl?menu=false")
@@ -196,7 +199,7 @@ class OneFichier():
         path = path if None else self.config["download_path"]
         filename = os.path.abspath(os.path.join(path, data["name"]))
         if os.path.isfile(filename):
-            print("Resuming download...")
+            logging.info("Resuming download...")
             headers = {'Range': 'bytes=%d-' % os.path.getsize(filename)}
 
         # Requesting the file
@@ -205,11 +208,11 @@ class OneFichier():
 
             # File fully downloaded
             if response.status_code == 416:
-                print("File already downloaded, skipping...")
+                logging.info("File already downloaded, skipping...")
 
             # Global error...
             else:
-                print("Global error (HTTP status code: " + str(response.status_code) + ") !")
+                logging.error("Global error (HTTP status code: " + str(response.status_code) + ") !")
 
             return
 
@@ -226,11 +229,11 @@ class OneFichier():
             openpos = int(m.group(1))
 
         file_size = int(headers["content-length"]) if 'content-length' in headers else 1
-        print("File size : " + str(file_size) + " bytes (" + str(round(file_size / 1024 / 1024, 2)) + "M)")
+        logging.info("File size : " + "{0:,}".format(file_size).replace(',', ' ') + " bytes (" +
+                     "{0:,}".format(round(file_size / 1024 / 1024, 2)).replace(',', ' ') + "M)")
 
         done = openpos          # bytes already downloaded
         chunksize = 4096 * 16   # size of the stream
-        blocks = 0              # number of blocks already downloaded
         start = time.time()     # Total elapsed time
         with open(filename, openmode) as handle:
 
@@ -238,30 +241,16 @@ class OneFichier():
             if openpos > 0:
                 handle.seek(openpos)
 
-            print(str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
             for block in response.iter_content(chunksize):
 
                 handle.write(block)
-
-                # Space separator
-                if blocks % 8 == 0 and blocks > 0:
-                    print(" ", end='', flush=True)
-
-                # New line
-                if blocks % 80 == 0 and blocks > 0:
-                    print("{:.2%}".format(done / file_size))
-                    print(str(round(done / 1024 / 1024, 1)) + "M ", flush=True, end='')
-
-                blocks += 1
-                print('.', end='', flush=True)
-
                 done += chunksize
 
-        end = (time.time() - start) * 1000
+        elapsed = (time.time() - start)  # * 1000
+        m, s = divmod(elapsed, 60)
+        h, m = divmod(m, 60)
+        logging.info("Elapsed time : %d:%02d:%02d" % (h, m, s))
 
-        ts = time.time()
-        print(datetime.datetime.fromtimestamp(ts).strftime('%d-%m-%Y %H:%M:%S'))
-        print("Elapsed time : " + str(round(end)) + " seconds")
 
     def deleteFile(self, file_id):
         """
@@ -271,7 +260,7 @@ class OneFichier():
 
         """
 
-        print("Deleting file #" + file_id)
+        logging.debug("Deleting file #" + file_id)
 
         data = {
             "selected[]": file_id,
@@ -291,7 +280,7 @@ class OneFichier():
         :return:
         """
 
-        print("Moving file #" + file_id + " to directory #" + dir_id)
+        logging.debug("Moving file #" + file_id + " to directory #" + dir_id)
 
         data = {
             "dragged[]": file_id,
@@ -338,7 +327,6 @@ class OneFichier():
         """
 
         res = self.session.get(self.BASE_URL + "/console/dirs.pl?dir_id=" + str(dir_id))
-        # print(res.content.decode("utf-8"))
 
         # Htmlify the result
         soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html>", "html.parser")
@@ -350,8 +338,6 @@ class OneFichier():
             name = div.get_text().split(u"\xa0")[0]
             hasChildren = div.find("div", {"class": "fcp"}) is not None
             rel = li.attrs["rel"]
-
-            # print("Found directory " + rel + ":\"" + name + "\"")
 
             self.Directories[rel] = \
             {
@@ -411,6 +397,11 @@ class OneFichier():
 
 def main(argv):
 
+    # Init log
+    logging.basicConfig(filename="/home/adrien/.config/onefichier/trace.log",
+                        level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s: %(message)s')
+
     # Read arguments
     try:
         opts, args = getopt.getopt(argv, "i", ["init"])
@@ -450,7 +441,7 @@ def main(argv):
             one.moveFile(file_id, done_id)
 
         # Some delay
-        print("Going to sleep...")
+        logging.debug("Going to sleep...")
         time.sleep(int(one.config["delay"]))
 
 if __name__ == "__main__":
