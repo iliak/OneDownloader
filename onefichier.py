@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 
-import datetime
 import getopt
 import getpass
 import json
@@ -11,7 +10,6 @@ import os.path
 import re
 import sys
 import time
-import locale
 
 import requests
 from bs4 import BeautifulSoup
@@ -19,8 +17,9 @@ from bs4 import BeautifulSoup
 
 class OneFichier:
     BASE_URL = "https://1fichier.com"
-    CONFIG_PATH = ".config/onefichier/"
+    CONFIG_PATH = ".onefichier/"
     CONFIG_FILE = "config.json"
+    LOG_FILE = "trace.log"
 
     def __init__(self, config_file=None):
         """
@@ -55,6 +54,10 @@ class OneFichier:
 
     @staticmethod
     def makeconf():
+        """
+        Create a config file in home directory
+        :return: None
+        """
         print("make config file...")
 
         # Create the path in home directory
@@ -87,8 +90,6 @@ class OneFichier:
     def login(self, lt="on", restrict="off", purge="off"):
         """
 
-        :param mail: login
-        :param password: password
         :param lt: long session
         :param restrict: Restrict the session to my IP address
         :param purge: purge old sessions
@@ -108,7 +109,6 @@ class OneFichier:
 
         result = self.session.post(self.BASE_URL + "/login.pl", data)
 
-
         # Update directories
         self.getDirectories()
 
@@ -118,7 +118,7 @@ class OneFichier:
         logging.debug("Logout...")
         pass
 
-    def getFilesByDirectoryName(self, name =""):
+    def getFilesByDirectoryName(self, name=""):
         """
         Get a listing of file in a directory by its name
         :param name: Name of the directory
@@ -132,7 +132,7 @@ class OneFichier:
         """
         Get a listing of file in a directory by its id
 
-        :param name: Id of the directory to list
+        :param dir_id: Id of the directory to list
         :return: Array of files
         """
 
@@ -151,8 +151,7 @@ class OneFichier:
             soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html", "html.parser")
             a = soup.find("a", href=re.compile("^https://1fichier.com/"))
 
-            files[ref] =\
-            {
+            files[ref] ={
                 "name": name,
                 "url": a.attrs["href"]
             }
@@ -181,7 +180,6 @@ class OneFichier:
         if data is None or data["name"] is None or data["url"] is None:
             return
 
-        ts = time.time()
         logging.info("Downloading file \"" + data["name"] + "\"")
 
         # Disable the download menu
@@ -251,7 +249,6 @@ class OneFichier:
         h, m = divmod(m, 60)
         logging.info("Elapsed time : %d:%02d:%02d" % (h, m, s))
 
-
     def deleteFile(self, file_id):
         """
         Deletes a file
@@ -267,8 +264,6 @@ class OneFichier:
             "remove": 1,
         }
         result = self.session.post(self.BASE_URL + "/console/remove.pl", data)
-
-        pass
 
     def moveFile(self, file_id, dir_id):
         """
@@ -288,8 +283,6 @@ class OneFichier:
             "dropped_dir": dir_id,
         }
         result = self.session.post(self.BASE_URL + "/console/op.pl", data)
-
-        pass
 
     def addFileToDirectory(self, file_name, dir_id):
         """
@@ -336,7 +329,7 @@ class OneFichier:
 
             div = li.find("div")
             name = div.get_text().split(u"\xa0")[0]
-            hasChildren = div.find("div", {"class": "fcp"}) is not None
+            haschildren = div.find("div", {"class": "fcp"}) is not None
             rel = li.attrs["rel"]
 
             self.Directories[rel] = \
@@ -347,9 +340,8 @@ class OneFichier:
 
             # Find the sub directories
             # if (int(rel) != dir_id and hasChildren):
-            if (hasChildren):
+            if haschildren:
                 self.getDirectories(rel)
-
 
         return self.Directories
 
@@ -398,7 +390,12 @@ class OneFichier:
 def main(argv):
 
     # Init log
-    logging.basicConfig(filename="/home/adrien/.config/onefichier/trace.log",
+    path = os.path.join(os.path.expanduser("~"), OneFichier.CONFIG_PATH)
+    if os.path.exists(path) is False:
+        os.mkdir(path, 0o700)
+
+    log = os.path.join(path, OneFichier.LOG_FILE)
+    logging.basicConfig(filename=log,
                         level=logging.INFO,
                         format='%(asctime)s - %(levelname)s: %(message)s')
 
@@ -406,7 +403,7 @@ def main(argv):
     try:
         opts, args = getopt.getopt(argv, "i", ["init"])
     except getopt.GetoptError:
-        print("onefichier --help")
+        logging.warning("onefichier --help")
         sys.exit(2)
 
     for opt, args in opts:
@@ -414,7 +411,6 @@ def main(argv):
             OneFichier.makeconf()
 
     one = OneFichier()
-
     while True:
         # Login
         one.login()
@@ -428,7 +424,6 @@ def main(argv):
         # Backup directory present ?
         done_id = one.getDirectory(dir_id, one.config["done"])
         if not done_id:
-            # Then make it
             done_id = one.makeDirectory(dir_id, one.config["done"])
 
         # Let's go !!!
@@ -441,7 +436,7 @@ def main(argv):
             one.moveFile(file_id, done_id)
 
         # Some delay
-        logging.debug("Going to sleep...")
+        # logging.debug("Going to sleep...")
         time.sleep(int(one.config["delay"]))
 
 if __name__ == "__main__":
