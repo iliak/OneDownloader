@@ -10,9 +10,10 @@ import os.path
 import re
 import sys
 import time
-
+import smtplib
 import requests
 from bs4 import BeautifulSoup
+from email.mime import multipart, text
 
 
 class OneFichier:
@@ -76,6 +77,15 @@ class OneFichier:
 
         if data["delay"] == "":
             data["delay"] = 300
+
+        data["smtp"]["host"] = input("Smtp host: ")
+        data["smtp"]["port"] = input("Smtp port: ")
+        data["smtp"]["user"] = input("Smtp user: ")
+        data["smtp"]["password"] = getpass.getpass("Smtp password: ")
+        data["smtp"]["from"] = input("Smtp from: ")
+        data["smtp"]["to"] = input("Smtp to: ")
+        data["smtp"]["subject"] = "OneFichier reporting"
+        data["smtp"]["tls"] = True
 
         # Save the file
         file = os.path.join(path, OneFichier.CONFIG_FILE)
@@ -386,6 +396,29 @@ class OneFichier:
 
         return None
 
+    def sendreport(self, body):
+        """
+        Send a notification by email
+
+        :param body:    Body of the mail
+        :return:
+        """
+        smtp = self.config['smtp']
+
+        msg = multipart.MIMEMultipart()
+        msg['From'] = smtp['from']
+        msg['To'] = smtp['to']
+        msg['Subject'] = smtp['subject']
+
+        msg.attach(text.MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp['host'], smtp['port'])
+        server.starttls()
+        server.login(smtp['user'], smtp['password'])
+
+        server.sendmail(smtp['from'], smtp['to'], msg.as_string())
+        server.quit()
+
 
 def main(argv):
 
@@ -411,6 +444,7 @@ def main(argv):
             OneFichier.makeconf()
 
     one = OneFichier()
+
     while True:
         # Login
         one.login()
@@ -429,11 +463,17 @@ def main(argv):
         # Let's go !!!
         for file_id, file in files.items():
 
+            # Send an email
+            one.sendreport('Downloading ' + file['name'])
+
             # Download file
             one.downloadFile(file)
 
             # Backup the file
             one.moveFile(file_id, done_id)
+
+            # Send an email
+            one.sendreport(file['name'] + ' downloaded !')
 
         # Some delay
         # logging.debug("Going to sleep...")
