@@ -1,0 +1,4 @@
+beautifulsoup4==4.5.3
+bs4==0.0.1
+pkg-resources==0.0.0
+requests==2.12.4
