@@ -38,6 +38,7 @@ class OneFichier:
         if not os.path.isfile(config_file):
             logging.critical("Config file not found in " + config_file)
             logging.critical("Please run with --init parameter")
+            print("Failed to load config file ! ('{}')".format(config_file))
             sys.exit(2)
 
         # Open config file and check mandatory values
