@@ -22,6 +22,8 @@ class OneFichier:
     CONFIG_FILE = "config.json"
     LOG_FILE = "trace.log"
 
+    VERSION = "OneFichier 0.1"
+
     def __init__(self, config_file=None):
         """
 
@@ -106,6 +108,7 @@ class OneFichier:
         :return:
         """
 
+        logging.info(self.VERSION)
         logging.info("Login to 1fichier.com...")
 
         # Login test
