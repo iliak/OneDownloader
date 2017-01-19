@@ -438,16 +438,22 @@ def main(argv):
 
     # Read arguments
     try:
-        opts, args = getopt.getopt(argv, "i", ["init"])
-    except getopt.GetoptError:
+        opts, args = getopt.getopt(argv[1:], "ic:", ["init", "config="])
+    except getopt.GetoptError as e:
         logging.warning("onefichier --help")
         sys.exit(2)
 
-    for opt, args in opts:
+    config = None       # Config file name
+    for opt, arg in opts:
+        # Init ?
         if opt in ('-i', '--init'):
             OneFichier.makeconf()
 
-    one = OneFichier()
+        # Config filename to use
+        if opt in ('-c', '--config'):
+            config = arg
+
+    one = OneFichier(config)
 
     while True:
         # Login
@@ -484,4 +490,4 @@ def main(argv):
         time.sleep(int(one.config["delay"]))
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main(sys.argv)
