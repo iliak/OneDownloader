@@ -22,7 +22,7 @@ class OneFichier:
     CONFIG_FILE = "config.json"
     LOG_FILE = "trace.log"
 
-    VERSION = "OneFichier 0.1"
+    VERSION = "OneFichier v0.1"
 
     def __init__(self, config_file=None):
         """
