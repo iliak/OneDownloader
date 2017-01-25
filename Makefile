@@ -21,6 +21,7 @@ install:
 	@$(MKDIR) $(DATADIR)
 	@$(CP) $(FILES) $(DATADIR)/
 	@$(LN) $(DATADIR)/$(FILES) /usr/bin/$(NAME)
+	@chmod +x $(DATADIR)/$(FILES)
 
 
 uninstall:
