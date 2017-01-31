@@ -192,7 +192,7 @@ class OneFichier:
 
         # Oops, some infos are missing !!
         if data is None or data["name"] is None or data["url"] is None:
-            return
+            return False
 
         logging.info("Downloading file \"" + data["name"] + "\"")
 
@@ -215,7 +215,11 @@ class OneFichier:
             headers = {'Range': 'bytes=%d-' % os.path.getsize(filename)}
 
         # Requesting the file
-        response = self.session.get(url, headers=headers, stream=True)
+        try:
+            response = self.session.get(url, headers=headers, stream=True)
+        except requests.Exception.MissingSchema:
+            return False
+
         if not response.ok:
 
             # File fully downloaded
@@ -226,7 +230,7 @@ class OneFichier:
             else:
                 logging.error("Global error (HTTP status code: " + str(response.status_code) + ") !")
 
-            return
+            return False
 
         # Download the stream
         headers = response.headers
@@ -262,6 +266,8 @@ class OneFichier:
         m, s = divmod(elapsed, 60)
         h, m = divmod(m, 60)
         logging.info("Elapsed time : %d:%02d:%02d" % (h, m, s))
+
+        return True
 
     def deleteFile(self, file_id):
         """
@@ -477,13 +483,13 @@ def main(argv):
             one.sendreport('Downloading ' + file['name'])
 
             # Download file
-            one.downloadFile(file)
+            if one.downloadFile(file):
 
-            # Backup the file
-            one.moveFile(file_id, done_id)
+                # Backup the file
+                one.moveFile(file_id, done_id)
 
-            # Send an email
-            one.sendreport(file['name'] + ' downloaded !')
+                # Send an email
+                one.sendreport(file['name'] + ' downloaded !')
 
         # Some delay
         # logging.debug("Going to sleep...")
