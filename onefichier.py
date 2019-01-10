@@ -71,8 +71,8 @@ class OneFichier:
             os.chmod(path, 0o700)
 
         data = dict()
-        data["email"] = input("What is your login: ")
-        data["password"] = getpass.getpass("Whate is your password: ")
+        data["email"] = input("Insert your email address: ")
+        data["password"] = getpass.getpass("Insert your password: ")
         data["download_path"] = input("What is the local absolute where to download files: ")
         data["directory"] = input("What is the name of the folder on 1fichier to watch: ")
         data["done"] = input("What is the name of the folder where to move downloaded files: ")
@@ -81,6 +81,7 @@ class OneFichier:
         if data["delay"] == "":
             data["delay"] = 300
 
+        data["smtp"] = {}
         data["smtp"]["host"] = input("Smtp host: ")
         data["smtp"]["port"] = input("Smtp port: ")
         data["smtp"]["user"] = input("Smtp user: ")
@@ -100,7 +101,7 @@ class OneFichier:
 
         sys.exit()
 
-    def login(self, lt="on", restrict="off", purge="off"):
+    def login(self, lt="on", purge="off", valider="Send"):
         """
 
         :param lt: long session
@@ -117,11 +118,30 @@ class OneFichier:
             "mail": self.config["email"],
             "pass": self.config["password"],
             "lt": lt,
-            "restrict": restrict,
             "purge": purge,
+            "valider": valider,
         }
 
         result = self.session.post(self.BASE_URL + "/login.pl", data)
+        content = result.content.decode("utf-8")
+
+        if "Invalid username." in content:
+            logging.info("Wrong username")
+            print ("Wrong username")
+            exit()
+
+        if "Invalid username or Password." in content:
+            logging.info("Wrong password")
+            print ("Wrong password")
+            exit()
+
+            if "222" in content:
+                    logging.info("Your IP has (probably) been banned")
+                    print ("Your IP has (probably) been banned")
+            exit()
+
+        logging.info("Login successful.")
+        print ("Login successful.")
 
         # Update directories
         self.getDirectories()
@@ -340,6 +360,9 @@ class OneFichier:
         """
 
         res = self.session.get(self.BASE_URL + "/console/dirs.pl?dir_id=" + str(dir_id))
+
+        logging.info("Parsing directories. This might take some time...")
+        print ("Parsing directories. This might take some time...")
 
         # Htmlify the result
         soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html>", "html.parser")

@@ -26,7 +26,7 @@ sudo make install
 ```
 
 ####Init :
-This will create `~/.config/onefichier/config.json` file which contains all needed parameters
+This will create `~/.onefichier/config.json` file which contains all needed parameters
 ```
 onefichier --init
 ```
