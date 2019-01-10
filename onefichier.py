@@ -130,7 +130,7 @@ class OneFichier:
             print ("Wrong username")
             exit()
 
-        if "Invalid username or Password." in content:
+        elif "Invalid username or Password." in content:
             logging.info("Wrong password")
             print ("Wrong password")
             exit()
@@ -140,11 +140,13 @@ class OneFichier:
                     print ("Your IP has (probably) been banned")
             exit()
 
+        elif "For security reasons, you must reset your password" in content:
+            logging.info("Password has to be reset")
+            print ("Password has to be reset")
+            exit()
+
         logging.info("Login successful.")
         print ("Login successful.")
-
-        # Update directories
-        self.getDirectories()
 
     def logout(self):
 
@@ -351,18 +353,16 @@ class OneFichier:
 
         return None
 
-    def getDirectories(self, dir_id = 0):
+    def getDirectories(self, dir_id = 0, dir_parent = ""):
         """
         Collects the list of Directories
 
         :param dir_id: Id of the base directory
+        :param dir_id: Name of the parent folder to build full path
 
         """
 
         res = self.session.get(self.BASE_URL + "/console/dirs.pl?dir_id=" + str(dir_id))
-
-        logging.info("Parsing directories. This might take some time...")
-        print ("Parsing directories. This might take some time...")
 
         # Htmlify the result
         soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html>", "html.parser")
@@ -378,13 +378,14 @@ class OneFichier:
             self.Directories[rel] = \
             {
                 "name": name,
+                "path": os.path.join (dir_parent, name),
                 "parent": dir_id,
             }
 
             # Find the sub directories
             # if (int(rel) != dir_id and hasChildren):
             if haschildren:
-                self.getDirectories(rel)
+                self.getDirectories(dir_id = rel, dir_parent = os.path.join (dir_parent, name))
 
         return self.Directories
 
@@ -487,6 +488,11 @@ def main(argv):
     while True:
         # Login
         one.login()
+
+        # Update directories
+        logging.info("Parsing directories. This might take some time...")
+        print ("Parsing directories. This might take some time...")
+        one.getDirectories()
 
         # Files to downloadFile
         files = one.getFilesToDownload()
