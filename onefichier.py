@@ -164,15 +164,16 @@ class OneFichier:
 
         return self.getFilesByDirectoryId(dir_id)
 
-    def getFilesByDirectoryId(self, dir_id):
+    def getFilesByDirectoryId(self, dir_id, dir_name = ""):
         """
         Get a listing of file in a directory by its id
 
         :param dir_id: Id of the directory to list
+        :param dir_name: Name of the directory to list
         :return: Array of files
         """
 
-        res = self.session.get(self.BASE_URL + "/console/files.pl?dir_id=" + str(dir_id) + "&oby=da")
+        res = self.session.get(self.BASE_URL + "/console/files.pl?dir_id=" + str(dir_id) + "&oby=0&search=")
 
         # Htmlify the result
         soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html>", "html.parser")
@@ -187,9 +188,11 @@ class OneFichier:
             soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html", "html.parser")
             a = soup.find("a", href=re.compile("^https://1fichier.com/"))
 
-            files[ref] ={
-                "name": name,
-                "url": a.attrs["href"]
+            files[ref] = \
+            {
+                "name"  : name,
+                "path"  : os.path.join (dir_name, name),
+                "url"   : a.attrs["href"]
             }
 
         return files
@@ -377,8 +380,8 @@ class OneFichier:
 
             self.Directories[rel] = \
             {
-                "name": name,
-                "path": os.path.join (dir_parent, name),
+                "name"  : name,
+                "path"  : os.path.join (dir_parent, name),
                 "parent": dir_id,
             }
 
@@ -510,7 +513,6 @@ def main(argv):
 
             # Send an email
             one.sendreport('Downloading ' + file['name'])
-
             # Download file
             if one.downloadFile(file):
 
