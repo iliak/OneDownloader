@@ -221,10 +221,6 @@ class OneFichier:
 
         logging.info("Downloading file \"" + data["name"] + "\"")
 
-        # Open the url
-        get = self.session.get(data["url"])
-        url = get.text.split(";")[0]
-
         # If file already downloaded
         headers = {}
         path = path if not None else self.config["download_path"]
@@ -234,7 +230,7 @@ class OneFichier:
             headers = {'Range': 'bytes=%d-' % os.path.getsize(filename)}
 
         # Requesting the file
-        with requests.get(data["url"], headers=headers, stream=True) as response:
+        with self.session.get(data["url"], headers=headers, stream=True) as response:
             if not response.ok:
                 # File fully downloaded
                 if response.status_code == 416:
@@ -267,6 +263,8 @@ class OneFichier:
 
             if not os.path.exists(path):
                 os.makedirs(path)
+                logging.info("Creating folder %s" % path)
+
             with open(filename, openmode) as handle:
 
                 # resume mode ?
