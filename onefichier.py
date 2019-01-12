@@ -191,7 +191,7 @@ class OneFichier:
             files[ref] = \
             {
                 "name"  : name,
-                "path"  : os.path.join (dir_name, name),
+                "path"  : dir_name,
                 "url"   : a.attrs["href"]
             }
 
@@ -221,76 +221,67 @@ class OneFichier:
 
         logging.info("Downloading file \"" + data["name"] + "\"")
 
-        # Disable the download menu
-        self.session.get(self.BASE_URL + "/console/params.pl?menu=false")
-
         # Open the url
-        get = self.session.get(data["url"] + "&e=1&auth=1")
+        get = self.session.get(data["url"])
         url = get.text.split(";")[0]
 
-        # Enable back the download menu
-        self.session.get(self.BASE_URL + "/console/params.pl?menu=true")
-
-        # File already downloaded
+        # If file already downloaded
         headers = {}
-        path = path if None else self.config["download_path"]
+        path = path if not None else self.config["download_path"]
         filename = os.path.abspath(os.path.join(path, data["name"]))
         if os.path.isfile(filename):
             logging.info("Resuming download...")
             headers = {'Range': 'bytes=%d-' % os.path.getsize(filename)}
 
         # Requesting the file
-        try:
-            response = self.session.get(url, headers=headers, stream=True)
-        except requests.Exception.MissingSchema:
-            return False
+        with requests.get(data["url"], headers=headers, stream=True) as response:
+            if not response.ok:
+                # File fully downloaded
+                if response.status_code == 416:
+                    logging.info("File already downloaded, skipping...")
+                # Global error...
+                else:
+                    logging.error("Global error (HTTP status code: " + str(response.status_code) + ") !")
 
-        if not response.ok:
+                return False
 
-            # File fully downloaded
-            if response.status_code == 416:
-                logging.info("File already downloaded, skipping...")
+            # Download the stream
+            headers = response.headers
 
-            # Global error...
+            # Resume mode ?
+            if 'Content-Range' not in headers:
+                openmode = "wb"             # open file mode
+                openpos = 0                 # seek position in resume mode
             else:
-                logging.error("Global error (HTTP status code: " + str(response.status_code) + ") !")
+                openmode = "ab"
+                m = re.match("bytes (\d+)-(\d+)\/(\d+)", headers["Content-Range"])
+                openpos = int(m.group(1))
 
-            return False
+            file_size = int(headers["content-length"]) if 'content-length' in headers else 1
+            logging.info("File size : " + "{0:,}".format(file_size).replace(',', ' ') + " bytes (" +
+                        "{0:,}".format(round(file_size / 1024 / 1024, 2)).replace(',', ' ') + "M)")
 
-        # Download the stream
-        headers = response.headers
+            done = openpos          # bytes already downloaded
+            chunksize = 4096 * 16   # size of the stream
+            start = time.time()     # Total elapsed time
 
-        # Resume mode ?
-        if 'Content-Range' not in headers:
-            openmode = "wb"             # open file mode
-            openpos = 0                 # seek position in resume mode
-        else:
-            openmode = "ab"
-            m = re.match("bytes (\d+)-(\d+)\/(\d+)", headers["Content-Range"])
-            openpos = int(m.group(1))
+            if not os.path.exists(path):
+                os.makedirs(path)
+            with open(filename, openmode) as handle:
 
-        file_size = int(headers["content-length"]) if 'content-length' in headers else 1
-        logging.info("File size : " + "{0:,}".format(file_size).replace(',', ' ') + " bytes (" +
-                     "{0:,}".format(round(file_size / 1024 / 1024, 2)).replace(',', ' ') + "M)")
+                # resume mode ?
+                if openpos > 0:
+                    handle.seek(openpos)
 
-        done = openpos          # bytes already downloaded
-        chunksize = 4096 * 16   # size of the stream
-        start = time.time()     # Total elapsed time
-        with open(filename, openmode) as handle:
+                for block in response.iter_content(chunksize):
 
-            # resume mode ?
-            if openpos > 0:
-                handle.seek(openpos)
+                    handle.write(block)
+                    done += chunksize
 
-            for block in response.iter_content(chunksize):
-
-                handle.write(block)
-                done += chunksize
-
-        elapsed = (time.time() - start)  # * 1000
-        m, s = divmod(elapsed, 60)
-        h, m = divmod(m, 60)
-        logging.info("Elapsed time : %d:%02d:%02d" % (h, m, s))
+            elapsed = (time.time() - start)  # * 1000
+            m, s = divmod(elapsed, 60)
+            h, m = divmod(m, 60)
+            logging.info("Elapsed time : %d:%02d:%02d" % (h, m, s))
 
         return True
 
