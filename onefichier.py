@@ -71,8 +71,8 @@ class OneFichier:
             os.chmod(path, 0o700)
 
         data = dict()
-        data["email"] = input("What is your login: ")
-        data["password"] = getpass.getpass("Whate is your password: ")
+        data["email"] = input("Insert your email address: ")
+        data["password"] = getpass.getpass("Insert your password: ")
         data["download_path"] = input("What is the local absolute where to download files: ")
         data["directory"] = input("What is the name of the folder on 1fichier to watch: ")
         data["done"] = input("What is the name of the folder where to move downloaded files: ")
@@ -81,6 +81,7 @@ class OneFichier:
         if data["delay"] == "":
             data["delay"] = 300
 
+        data["smtp"] = {}
         data["smtp"]["host"] = input("Smtp host: ")
         data["smtp"]["port"] = input("Smtp port: ")
         data["smtp"]["user"] = input("Smtp user: ")
@@ -100,7 +101,7 @@ class OneFichier:
 
         sys.exit()
 
-    def login(self, lt="on", restrict="off", purge="off"):
+    def login(self, lt="on", purge="off", valider="Send"):
         """
 
         :param lt: long session
@@ -117,14 +118,35 @@ class OneFichier:
             "mail": self.config["email"],
             "pass": self.config["password"],
             "lt": lt,
-            "restrict": restrict,
             "purge": purge,
+            "valider": valider,
         }
 
         result = self.session.post(self.BASE_URL + "/login.pl", data)
+        content = result.content.decode("utf-8")
 
-        # Update directories
-        self.getDirectories()
+        if "Invalid username." in content:
+            logging.info("Wrong username")
+            print ("Wrong username")
+            exit()
+
+        elif "Invalid username or Password." in content:
+            logging.info("Wrong password")
+            print ("Wrong password")
+            exit()
+
+            if "222" in content:
+                    logging.info("Your IP has (probably) been banned")
+                    print ("Your IP has (probably) been banned")
+            exit()
+
+        elif "For security reasons, you must reset your password" in content:
+            logging.info("Password has to be reset")
+            print ("Password has to be reset")
+            exit()
+
+        logging.info("Login successful.")
+        print ("Login successful.")
 
     def logout(self):
 
@@ -142,15 +164,16 @@ class OneFichier:
 
         return self.getFilesByDirectoryId(dir_id)
 
-    def getFilesByDirectoryId(self, dir_id):
+    def getFilesByDirectoryId(self, dir_id, dir_name = ""):
         """
         Get a listing of file in a directory by its id
 
         :param dir_id: Id of the directory to list
+        :param dir_name: Name of the directory to list
         :return: Array of files
         """
 
-        res = self.session.get(self.BASE_URL + "/console/files.pl?dir_id=" + str(dir_id) + "&oby=da")
+        res = self.session.get(self.BASE_URL + "/console/files.pl?dir_id=" + str(dir_id) + "&oby=0&search=")
 
         # Htmlify the result
         soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html>", "html.parser")
@@ -165,9 +188,11 @@ class OneFichier:
             soup = BeautifulSoup("<html><body>" + res.content.decode("utf-8") + "</body></html", "html.parser")
             a = soup.find("a", href=re.compile("^https://1fichier.com/"))
 
-            files[ref] ={
-                "name": name,
-                "url": a.attrs["href"]
+            files[ref] = \
+            {
+                "name"  : name,
+                "path"  : dir_name,
+                "url"   : a.attrs["href"]
             }
 
         return files
@@ -196,76 +221,65 @@ class OneFichier:
 
         logging.info("Downloading file \"" + data["name"] + "\"")
 
-        # Disable the download menu
-        self.session.get(self.BASE_URL + "/console/params.pl?menu=false")
-
-        # Open the url
-        get = self.session.get(data["url"] + "&e=1&auth=1")
-        url = get.text.split(";")[0]
-
-        # Enable back the download menu
-        self.session.get(self.BASE_URL + "/console/params.pl?menu=true")
-
-        # File already downloaded
+        # If file already downloaded
         headers = {}
-        path = path if None else self.config["download_path"]
+        path = path if not None else self.config["download_path"]
         filename = os.path.abspath(os.path.join(path, data["name"]))
         if os.path.isfile(filename):
             logging.info("Resuming download...")
             headers = {'Range': 'bytes=%d-' % os.path.getsize(filename)}
 
         # Requesting the file
-        try:
-            response = self.session.get(url, headers=headers, stream=True)
-        except requests.Exception.MissingSchema:
-            return False
+        with self.session.get(data["url"], headers=headers, stream=True) as response:
+            if not response.ok:
+                # File fully downloaded
+                if response.status_code == 416:
+                    logging.info("File already downloaded, skipping...")
+                # Global error...
+                else:
+                    logging.error("Global error (HTTP status code: " + str(response.status_code) + ") !")
 
-        if not response.ok:
+                return False
 
-            # File fully downloaded
-            if response.status_code == 416:
-                logging.info("File already downloaded, skipping...")
+            # Download the stream
+            headers = response.headers
 
-            # Global error...
+            # Resume mode ?
+            if 'Content-Range' not in headers:
+                openmode = "wb"             # open file mode
+                openpos = 0                 # seek position in resume mode
             else:
-                logging.error("Global error (HTTP status code: " + str(response.status_code) + ") !")
+                openmode = "ab"
+                m = re.match("bytes (\d+)-(\d+)\/(\d+)", headers["Content-Range"])
+                openpos = int(m.group(1))
 
-            return False
+            file_size = int(headers["content-length"]) if 'content-length' in headers else 1
+            logging.info("File size : " + "{0:,}".format(file_size).replace(',', ' ') + " bytes (" +
+                        "{0:,}".format(round(file_size / 1024 / 1024, 2)).replace(',', ' ') + "M)")
 
-        # Download the stream
-        headers = response.headers
+            done = openpos          # bytes already downloaded
+            chunksize = 4096 * 16   # size of the stream
+            start = time.time()     # Total elapsed time
 
-        # Resume mode ?
-        if 'Content-Range' not in headers:
-            openmode = "wb"             # open file mode
-            openpos = 0                 # seek position in resume mode
-        else:
-            openmode = "ab"
-            m = re.match("bytes (\d+)-(\d+)\/(\d+)", headers["Content-Range"])
-            openpos = int(m.group(1))
+            if not os.path.exists(path):
+                os.makedirs(path)
+                logging.info("Creating folder %s" % path)
 
-        file_size = int(headers["content-length"]) if 'content-length' in headers else 1
-        logging.info("File size : " + "{0:,}".format(file_size).replace(',', ' ') + " bytes (" +
-                     "{0:,}".format(round(file_size / 1024 / 1024, 2)).replace(',', ' ') + "M)")
+            with open(filename, openmode) as handle:
 
-        done = openpos          # bytes already downloaded
-        chunksize = 4096 * 16   # size of the stream
-        start = time.time()     # Total elapsed time
-        with open(filename, openmode) as handle:
+                # resume mode ?
+                if openpos > 0:
+                    handle.seek(openpos)
 
-            # resume mode ?
-            if openpos > 0:
-                handle.seek(openpos)
+                for block in response.iter_content(chunksize):
 
-            for block in response.iter_content(chunksize):
+                    handle.write(block)
+                    done += chunksize
 
-                handle.write(block)
-                done += chunksize
-
-        elapsed = (time.time() - start)  # * 1000
-        m, s = divmod(elapsed, 60)
-        h, m = divmod(m, 60)
-        logging.info("Elapsed time : %d:%02d:%02d" % (h, m, s))
+            elapsed = (time.time() - start)  # * 1000
+            m, s = divmod(elapsed, 60)
+            h, m = divmod(m, 60)
+            logging.info("Elapsed time : %d:%02d:%02d" % (h, m, s))
 
         return True
 
@@ -331,11 +345,12 @@ class OneFichier:
 
         return None
 
-    def getDirectories(self, dir_id = 0):
+    def getDirectories(self, dir_id = 0, dir_parent = ""):
         """
         Collects the list of Directories
 
         :param dir_id: Id of the base directory
+        :param dir_id: Name of the parent folder to build full path
 
         """
 
@@ -354,14 +369,15 @@ class OneFichier:
 
             self.Directories[rel] = \
             {
-                "name": name,
+                "name"  : name,
+                "path"  : os.path.join (dir_parent, name),
                 "parent": dir_id,
             }
 
             # Find the sub directories
             # if (int(rel) != dir_id and hasChildren):
             if haschildren:
-                self.getDirectories(rel)
+                self.getDirectories(dir_id = rel, dir_parent = os.path.join (dir_parent, name))
 
         return self.Directories
 
@@ -465,6 +481,11 @@ def main(argv):
         # Login
         one.login()
 
+        # Update directories
+        logging.info("Parsing directories. This might take some time...")
+        print ("Parsing directories. This might take some time...")
+        one.getDirectories()
+
         # Files to downloadFile
         files = one.getFilesToDownload()
 
@@ -481,7 +502,6 @@ def main(argv):
 
             # Send an email
             one.sendreport('Downloading ' + file['name'])
-
             # Download file
             if one.downloadFile(file):
 
